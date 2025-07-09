@@ -97,7 +97,8 @@ function onScrollOpened(eventData)
             scrollName == "faction_ranking_scroll" or
             scrollName == "combined_listview_scroll" or
             scrollName == "college_of_cardinals_scroll" or
-            scrollName == "advanced_settlement_info_scroll"
+            scrollName == "advanced_settlement_info_scroll" or
+            scrollName == "family_tree_scroll"
         ) then
         OpenDCMain = false
     end
@@ -158,7 +159,7 @@ function draw(pDevice)
         --print("DC scroll opened!")--
     end
 
-    --draw DC Main window
+    ---draw DC MAIN WINDOW---
     if (OpenDCMain) then
 
         --GET PLAYER FACTION (in case it failed in OnLoadGame)
@@ -172,6 +173,17 @@ function draw(pDevice)
         OpenDCMain, shouldDraw = ImGui.Begin("Decisions##DCMain", OpenDCMain,
             bit.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoMove))
 
+        --Window Title
+        ImGui.SetCursorPos(425, 10)
+        ImGui.SetWindowFontScale(1.5)     -- enlarge text size
+        ImGui.Text("DECISIONS")
+        ImGui.SetWindowFontScale(1.0)     -- normalize text size
+
+
+        --Decision List Window
+        ImGui.SetCursorPos(30, 40)
+        local shouldDraw = ImGui.BeginChild("Decisions##DCListWindow", 890, 600,
+            bit.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoMove))
 
         if PlayerFaction then
             local factionTable = GetFactionDCTable(PlayerFaction.name)
@@ -179,13 +191,16 @@ function draw(pDevice)
 
             --decisions are part of the DCMain window, divided by separators
             for i, decision in ipairs(activeDecisions) do
-                -- Only show if the condition is met
-                if decision.condition() then
+                if decision.condition() then -- Only show if the condition is met
                     ImGui.Separator()
-                    ImGui.Text(decision.title)
+                    ImGui.SetWindowFontScale(1.1) -- enlarge text size
+                    ImGui.LabelText(decision.title)
+                    ImGui.SetWindowFontScale(1.0) -- normalize text size
                     ImGui.TextWrapped(decision.description)
+                    ImGui.SetCursorPos(700, ImGui.GetCursorPosY())
                     ImGui.TextColored(0.7, 1.0, 0.7, 1.0, decision.effectText)
 
+                    ImGui.SetCursorPos(820, ImGui.GetCursorPosY())      --enact button
                     if ImGui.Button("Enact##DCEnactButton" .. i) then
                         print("Decision applied: " .. decision.title)
                         decision.effect()
@@ -195,6 +210,7 @@ function draw(pDevice)
         else
             print("PlayerFaction is nil - decisions UI skipped.")
         end
+        ImGui.EndChild() --DCLIstWindow end
 
         --exit button
         ImGui.SetCursorPos(860, 760)
@@ -205,7 +221,7 @@ function draw(pDevice)
             print("DC window closed")                  --button functionality
             OpenDCMain = false;                        --same
         end
-        ImGui.EndChild()
-        ImGui.End()
+        ImGui.EndChild()        --DCMainExitButton end
+        ImGui.End()             --DCMain end
     end
 end

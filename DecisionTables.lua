@@ -62,6 +62,13 @@ FactionToTable = {
 
 
 
+
+
+
+
+---FUNCTIONS---
+
+
 --find player's faction's decision table
 function GetFactionDCTable(factionName)
     for key, factionKey in pairs(FactionToTable) do
