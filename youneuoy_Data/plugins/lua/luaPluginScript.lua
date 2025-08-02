@@ -16,15 +16,26 @@ require('helpers/tableSave')
 -- Our campaign config table.
 campaignConfig = { ["someConfigValue"] = 5 };
 
+
+-- Textures setup
+local ScrollTexture = {x = 0, y = 0, img = nil}
+local InnerScrollTexture = {x = 0, y = 0, img = nil}
+local ButtonSealTexture = {x = 0, y = 0, img = nil}
+local DcButtonTexture = {x = 0, y = 0, img = nil}
+local SeparatorTexture = {x = 0, y = 0, img = nil}
+
+
+
+
 -- Fires when loading a save file
 function onLoadSaveFile(paths)
-    campaignPopup = true;
+    campaignPopup = true
 
     for index, path in pairs(paths) do
-        if (string.find(path, "configTable.lua"))
-        then
-            -- Function from helper, load saved table
-            campaignConfig = persistence.load(path);
+        if string.find(path, "configTable.lua") then
+            campaignConfig = persistence.load(path)
+        elseif string.find(path, "luaenacted_decisions.lua") then
+            EnactedDecisionsHashSet = persistence.load(path)
         end
     end
 end
@@ -37,20 +48,13 @@ function onCreateSaveFile()
 
     -- Function from helper, save our table
     persistence.store(currentPath .. "configTable.lua", campaignConfig);
+    persistence.store(currentPath .. "enacted_decisions.lua", EnactedDecisionsHashSet)
 
     savefiles[1] = currentPath .. "configTable.lua";
+    savefiles[2] = currentPath .. "enacted_decisions.lua";
     return savefiles;
 end
 
-
-
-
---TEXTURES (TEMPORARY!!!)
-local greekScroll = {x = 0, y = 0, img = nil}
-local greekInnerScroll = {x = 0, y = 0, img = nil}
-local greekButton = {x = 0, y = 0, img = nil}
-local DCScrollButton = {x = 0, y = 0, img = nil}
-local TsarSeparator = {x = 0, y = 0, img = nil}
 
 --Fires when the plugin is first loaded at game start or restarted with restartLua()
 function onPluginLoad()
@@ -72,12 +76,8 @@ function onCampaignMapLoaded()
     BATTLE = GAME_DATA.battleStruct
     UI_MANAGER = GAME_DATA.uiCardManager
 
-    --TEXTURES (temporary!)
-    greekScroll.x, greekScroll.y, greekScroll.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\greekScroll.png")
-    greekInnerScroll.x, greekInnerScroll.y, greekInnerScroll.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\greekInnerScroll.png")
-    greekButton.x, greekButton.y, greekButton.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\greekButton.png")
-    DCScrollButton.x, DCScrollButton.y, DCScrollButton.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\DCScrollButton.png")
-    
+
+
     ButtonSound = M2TWEOPSounds.createEOPSound(M2TWEOP.getModPath().."\\eopData\\music\\button.ogg")
     ScrollOpenSound = M2TWEOPSounds.createEOPSound(M2TWEOP.getModPath().."\\eopData\\music\\scrollOpen.ogg")
 end
@@ -102,6 +102,10 @@ local OpenDCMain = false  --boolean for opening DCMain window
 ---A  window with the "DecisionsButtonMain" opens when the overview scroll is opened, which can then be clicked to access the Decisions scroll ---
 ---Furthermore, all backend logic for the DC scroll is handled here ---
 function onScrollOpened(eventData)
+        
+    --TEXTURES (I would like to move this to onCampaignMapLoaded, but lazy loading prevents it)
+    loadTextures(PlayerFaction, ScrollTexture, InnerScrollTexture, ButtonSealTexture, DcButtonTexture, SeparatorTexture)
+
     local scrollName = eventData.resourceDescription
 
     --debugging
@@ -117,10 +121,11 @@ function onScrollOpened(eventData)
         OpenDCButton = true
 
         --GET PLAYER FACTION (in case it failed in OnLoadGame)
-        PlayerFaction = stratmap.game.getFaction(0)
+        PlayerFaction = tsGetPlayerFaction()
 
+        --Get Decision Tables
         if PlayerFaction then   --if playerFaction != nil
-            getFactionLeaderInfo()
+            getSignatureInfo()
             FactionTable = GetFactionDCTable(PlayerFaction.name)  --get Full Decision Table for the faction
             ActiveDecisions = CreateActiveDecisionsTable(FactionTable)    --filter it down to only the active Decisions
         else
@@ -140,14 +145,6 @@ function onScrollOpened(eventData)
         ) then
         OpenDCMain = false
     end
-
-        --TEXTURES (temporary!, used for testing)
-    greekScroll.x, greekScroll.y, greekScroll.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\greekScroll.png")
-    greekInnerScroll.x, greekInnerScroll.y, greekInnerScroll.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\greekInnerScroll.png")
-    greekButton.x, greekButton.y, greekButton.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\greekButton.png")
-    DCScrollButton.x, DCScrollButton.y, DCScrollButton.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\DCScrollButton.png")  
-    TsarSeparator.x, TsarSeparator.y, TsarSeparator.img = M2TWEOP.loadTexture(M2TWEOP.getModPath().."\\eopData\\images\\TsarSeparator.png")
-
 end
 
 
@@ -201,27 +198,11 @@ function draw(pDevice)
             bit.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoMove, ImGuiWindowFlags.NoBackground,
                 ImGuiWindowFlags.NoScrollWithMouse))
 
-        --Main Button Texture is rendered below the actual button
-        --[[ImGui.SetCursorPos(0, 0)
-        xPos, yPos = ImGui.GetCursorPos()
-        ImGui.Image(DCScrollButton.img, 77, 57)
-        ImGui.SetCursorPos(xPos, yPos)
-
-
-        pushTransparentButtonStyle()
-        if ImGui.Button("##DCButtonMain", 77, 57) then     --generate button, and add functionality
-            --print("DC main Button clicked!")
-            OpenDCMain = not OpenDCMain
-            --M2TWEOPSounds.playEOPSound (ScrollOpenSound)  --NOT USED IN TESTING, CAUSES CRASHES
-        end
-        popTransparentButtonStyle()
-        ]]
-
-            tsCustomButton("##DCButtonMain", 0, 0, 77, 57,
-                function()
-                    OpenDCMain = not OpenDCMain
-                end,
-                ScrollOpenSound, DCScrollButton)
+        tsCustomButton("##DCButtonMain", 0, 0, 77, 57,
+            function()
+                OpenDCMain = not OpenDCMain
+            end,
+            ScrollOpenSound, DcButtonTexture, "Show decisions scroll")
 
 
 
@@ -240,7 +221,7 @@ function draw(pDevice)
         
         --main texture
         local xPos, yPos = ImGui.GetCursorPos() 
-        ImGui.Image(greekScroll.img, 950, 835)
+        ImGui.Image(ScrollTexture.img, 950, 835)
         ImGui.SetCursorPos(xPos, yPos)
 
         --Window Title
@@ -255,14 +236,11 @@ function draw(pDevice)
 
 
 
-
         --inner (list window) texture
         ImGui.SetCursorPos(35, 130)
         xPos, yPos = ImGui.GetCursorPos()
-        ImGui.Image(greekInnerScroll.img, 890, 640)
+        ImGui.Image(InnerScrollTexture.img, 890, 640)
         ImGui.SetCursorPos(xPos, yPos)
-
-
 
         --Decision List Window
         ImGui.SetCursorPos(65, 144)
@@ -274,31 +252,42 @@ function draw(pDevice)
 
         --decisions are part of the DCListWindow, divided by separators
         for i, decision in ipairs(ActiveDecisions) do
+            --Title
             ImGui.PushStyleColor(ImGuiCol.Text, 0.0, 0.0, 0.0, 1.0) --make text black
             ImGui.SetWindowFontScale(1.3) -- enlarge text size
-            ImGui.LabelText(decision.title)
+            ImGui.SetCursorPos(290 - (string.len(decision.title) * 1.7), ImGui.GetCursorPosY() + 5)
+            ImGui.TextWrapped(decision.title)
             ImGui.SetWindowFontScale(1.0) -- normalize text size
 
-            ImGui.SetCursorPos(20
-            , ImGui.GetCursorPosY())
+            --Description
+            ImGui.SetCursorPos(20, ImGui.GetCursorPosY())
             ImGui.SetWindowFontScale(1.1) -- enlarge text size
-            ImGui.TextWrapped(decision.description())
+            ImGui.TextWrapped(decision.description)
             ImGui.SetWindowFontScale(1.0) -- normalize text size
 
+            --Signature
+            ImGui.SetCursorPos(20, ImGui.GetCursorPosY())
+            ImGui.SetWindowFontScale(1.1) -- enlarge text size
+            ImGui.TextWrapped(decision.signature())
+            ImGui.SetWindowFontScale(1.0) -- normalize text size
+
+            --[[Effect Text
             ImGui.SetCursorPos(480, (ImGui.GetCursorPosY())+10)
             ImGui.PushStyleColor(ImGuiCol.Text, 0.05, 0.4, 0.05, 1.0)
             ImGui.TextWrapped(decision.effectText)
             ImGui.PopStyleColor(2)            -- removes text assigned colour from stack(imgui logic)
-
+            ]]
 
             tsCustomButton("##DCEnactButton" .. i, 720, ImGui.GetCursorPosY(), 64, 64,          --the "i" in the button name ensures that every button has a unique name, so it can function!
                 function()
                     decision.effect()
+                    insertDCtoEnactedHashSet(decision.DCnum, tostring(decision.signature()), decision.revoke())
+                    ActiveDecisions = CreateActiveDecisionsTable(FactionTable)
                 end,
-                ButtonSound, greekButton)
+                ButtonSound, ButtonSealTexture, decision.effectText)
 
 
-            tsCustomSeparator(0, ImGui.GetCursorPosY(), 815, 30, TsarSeparator)    
+            tsCustomSeparator(0, ImGui.GetCursorPosY(), 815, 30, SeparatorTexture)    
         end
         ImGui.EndChild() --DCLIstWindow end
 
@@ -306,7 +295,7 @@ function draw(pDevice)
         --exit button texture
         ImGui.SetCursorPos(820, 730)
         xPos, yPos = ImGui.GetCursorPos()
-        ImGui.Image(greekButton.img, 130, 110)
+        ImGui.Image(ButtonSealTexture.img, 130, 110)
         ImGui.SetCursorPos(xPos, yPos)
 
         --Exit button, without texture in this instance because it needed to be bigger than the button
@@ -314,7 +303,7 @@ function draw(pDevice)
             function()
                 OpenDCMain = false;
             end,
-            ButtonSound, nil)
+            ButtonSound, nil, "Close this scroll")
 
 
         ImGui.End() --Decisions##DCMain end
